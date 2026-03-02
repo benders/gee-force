@@ -10,8 +10,8 @@
  */
 
 #include "Particle.h"
-#include "Grove_4Digital_Display.h"
-#include "MMA7660.h"
+#include "Grove_4Digit_Display.h"
+#include "MMA7660-Accelerometer.h"
 
 // Pin definitions
 #define CLK D2
