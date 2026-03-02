@@ -69,13 +69,13 @@ void loop() {
         maxGForce = currentGForce;
     }
 
-    // Display current G-force
-    displayValue(currentGForce);
-
     // Publish to Particle Cloud (rate limited to 1 per second)
     // Only publish if cloud is connected
     unsigned long currentTime = millis();
     if (currentTime - lastPublishTime >= PUBLISH_INTERVAL) {
+        // Update display only once per second to reduce I2C traffic
+        displayValue(currentGForce);
+
         if (Particle.connected()) {
             // Get free memory
             uint32_t freeMemory = System.freeMemory();
