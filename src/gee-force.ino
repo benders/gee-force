@@ -13,6 +13,9 @@
 #include "Grove_4Digit_Display.h"
 #include "MMA7660-Accelerometer.h"
 
+// Enable system thread so user code runs independently of cloud
+SYSTEM_THREAD(ENABLED);
+
 // Pin definitions
 #define CLK D2
 #define DIO D3
@@ -28,6 +31,9 @@ float currentGForce = 0.0;
 // Timing for cloud publishing (rate limit: 1 per second)
 unsigned long lastPublishTime = 0;
 const unsigned long PUBLISH_INTERVAL = 1000; // milliseconds
+
+// Static buffer for publishing (avoid heap fragmentation)
+char publishBuffer[64];
 
 void setup() {
     Serial.begin(9600);
@@ -57,36 +63,23 @@ void loop() {
         maxGForce = currentGForce;
     }
 
-    // Get free memory
-    uint32_t freeMemory = System.freeMemory();
-
-    // Serial output for debugging (only if serial is connected)
-    if (Serial) {
-        Serial.print("Accel: x=");
-        Serial.print(ax, 2);
-        Serial.print("g y=");
-        Serial.print(ay, 2);
-        Serial.print("g z=");
-        Serial.print(az, 2);
-        Serial.print("g | Magnitude: ");
-        Serial.print(currentGForce, 2);
-        Serial.print("g | Max: ");
-        Serial.print(maxGForce, 2);
-        Serial.print("g | Free RAM: ");
-        Serial.print(freeMemory);
-        Serial.println(" bytes");
-    }
-
     // Display current G-force
     displayValue(currentGForce);
 
     // Publish to Particle Cloud (rate limited to 1 per second)
+    // Only publish if cloud is connected
     unsigned long currentTime = millis();
     if (currentTime - lastPublishTime >= PUBLISH_INTERVAL) {
-        // Send JSON with g-force, max, and free memory
-        String data = String::format("{\"g\":%.2f,\"max\":%.2f,\"mem\":%lu}",
-                                     currentGForce, maxGForce, freeMemory);
-        Particle.publish("gforce", data, PRIVATE);
+        if (Particle.connected()) {
+            // Get free memory
+            uint32_t freeMemory = System.freeMemory();
+
+            // Use static buffer to avoid heap fragmentation
+            snprintf(publishBuffer, sizeof(publishBuffer),
+                     "{\"g\":%.2f,\"max\":%.2f,\"mem\":%lu}",
+                     currentGForce, maxGForce, freeMemory);
+            Particle.publish("gforce", publishBuffer, PRIVATE);
+        }
         lastPublishTime = currentTime;
     }
 
