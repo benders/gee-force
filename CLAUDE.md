@@ -24,17 +24,17 @@ particle list
 
 ### Building and Flashing
 ```bash
+# Check status and find device name
+particle list
+
 # Compile the project in the cloud
 particle compile photon
 
-# Flash to a specific device over-the-air
-particle flash <device_name> src/
-
-# Flash to a device via USB (device must be in DFU mode)
-particle flash --usb src/
-
-# Compile and flash in one command
+# Compile and flash over the cloud in one command
 particle flash <device_name>
+
+# Flash file to a device via USB (device must be in DFU mode)
+particle flash --usb <firmware-file.bin>
 ```
 
 ### Monitoring

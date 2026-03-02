@@ -1,109 +1,121 @@
-/*
- * Gee-Force: Model Rocket Launch G-Force Tracker
- *
- * Hardware:
- * - Particle Photon microcontroller
- * - Grove 4-digit display (CLK: D2, DIO: D3)
- * - Grove 3-axis digital accelerometer (I2C, MMA7660 chip)
- *
- * Note: MMA7660 accelerometer is for prototyping only (limited range)
- */
+// This #include statement was automatically added by the Particle IDE.
+#include <Grove_4Digit_Display.h>
+#define CLK D2 //pins definitions for TM1637 and can be changed to other ports
+#define DIO D3
+TM1637 tm1637(CLK,DIO);
 
+// Include Particle Device OS APIs
 #include "Particle.h"
-#include "Grove_4Digit_Display.h"
-#include "MMA7660-Accelerometer.h"
 
-// Enable system thread so user code runs independently of cloud
-SYSTEM_THREAD(ENABLED);
+// This #include statement was automatically added by the Particle IDE.
+// #include <MMA7660-Accelerometer.h>
+// MMA7660 accelerometer;
+
+// Let Device OS manage the connection to the Particle Cloud
+SYSTEM_MODE(AUTOMATIC);
 
 // Enable application watchdog (60 second timeout)
 ApplicationWatchdog wd(60000, System.reset);
 
-// Pin definitions
-#define CLK D2
-#define DIO D3
+// Show system, cloud connectivity, and application logs over USB
+// View logs with CLI using 'particle serial monitor --follow'
+SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
-// Hardware instances
-TM1637 display(CLK, DIO);
-MMA7660 accelerometer;
+#include "MMA7660.h"
+MMA7660 accel;
+float accelX, accelY, accelZ;
+float mag = 0.0f;               // promoted so both timers can access it
+unsigned long lastSample  = 0;
+unsigned long lastPublish = 0;  // independent publish timer
 
-// G-force tracking
-float maxGForce = 0.0;
-float currentGForce = 0.0;
+#define SAMPLE_INTERVAL   100   // accelerometer + display refresh (ms)
+#define PUBLISH_INTERVAL  2000  // Particle cloud publish (ms)
 
-// Timing for cloud publishing (rate limit: 1 per second)
-unsigned long lastPublishTime = 0;
-const unsigned long PUBLISH_INTERVAL = 1000; // milliseconds
+void displayNum(TM1637 tm, float num, int decimal = 0, bool show_minus = true) {
+    // Displays number with decimal places (no decimal point implementation)
+    // Colon is used instead of decimal point if decimal == 2
+    // Be aware of int size limitations (up to +-2^15 = +-32767)
+    const int DIGITS = 4; // Number of digits on display
 
-// Static buffer for publishing (avoid heap fragmentation)
-char publishBuffer[64];
+    int number = round(fabs(num) * pow(10, decimal));
 
-void setup() {
-    Serial.begin(9600);
+    if (decimal == 2) {
+        tm.point(true);
+    } else {
+        tm.point(false);
+    }
 
-    // Initialize display
-    display.init();
-    display.set(BRIGHT_TYPICAL);
-    display.point(POINT_OFF);
+    for (int i = 0; i < DIGITS - (show_minus && num < 0 ? 1 : 0); ++i) {
+        int j = DIGITS - i - 1;
 
-    // Initialize accelerometer
-    accelerometer.init();
+        if (number != 0) {
+            tm.display(j, number % 10);
+        } else {
+            tm.display(j, 0x7f);    // display nothing
+        }
 
-    Serial.println("Gee-Force Tracker Initialized");
-    displayValue(0.0);
+        number /= 10;
+    }
+
+    if (show_minus && num < 0) {
+        tm.display(0, '-');    // Display '-'
+    }
 }
 
+// setup() runs once, when the device is first turned on
+void setup() {
+    if (!accel.begin()) {
+        Serial.println("ERROR: Could not initialise accelerometer. Halting.");
+        while (true) { Particle.process(); }
+    }
+
+    tm1637.init();
+    tm1637.set(BRIGHT_TYPICAL); //BRIGHT_TYPICAL = 2,BRIGHT_DARKEST = 0,BRIGHTEST = 7;
+    tm1637.point(POINT_OFF);
+
+    Log.info("Setup has finished!");
+}
+
+// loop() runs over and over again, as quickly as it can execute.
+// This is a very basic programming model (the superloop) - 
+// for more advanced threading models, please see the Device OS documentation at docs.particle.io
 void loop() {
     // Pet the watchdog to prevent reset
     ApplicationWatchdog::checkin();
 
-    // Read accelerometer data using library's built-in conversion
-    float ax, ay, az;
-    accelerometer.getAcceleration(&ax, &ay, &az);
+    unsigned long now = millis();
 
-    // Calculate total G-force magnitude
-    currentGForce = sqrt(ax*ax + ay*ay + az*az);
+    // --- Fast path: read accelerometer and update display every 100ms ---
+    if (now - lastSample >= SAMPLE_INTERVAL) {
+        lastSample = now;
 
-    // Track maximum G-force
-    if (currentGForce > maxGForce) {
-        maxGForce = currentGForce;
-    }
+        if (accel.readAxes(accelX, accelY, accelZ)) {
+            mag = accel.magnitude(accelX, accelY, accelZ);
 
-    // Publish to Particle Cloud (rate limited to 1 per second)
-    // Only publish if cloud is connected
-    unsigned long currentTime = millis();
-    if (currentTime - lastPublishTime >= PUBLISH_INTERVAL) {
-        // Update display only once per second to reduce I2C traffic
-        displayValue(currentGForce);
+            // Update the 4-digit display on every sample
+            displayNum(tm1637, mag, 2);
 
-        if (Particle.connected()) {
-            // Get free memory
-            uint32_t freeMemory = System.freeMemory();
-
-            // Use static buffer to avoid heap fragmentation
-            snprintf(publishBuffer, sizeof(publishBuffer),
-                     "{\"g\":%.2f,\"max\":%.2f,\"mem\":%lu}",
-                     currentGForce, maxGForce, freeMemory);
-            Particle.publish("gforce", publishBuffer, PRIVATE);
+            // Console output on every sample
+            Serial.printlnf("Accel  X: %+.3fg  Y: %+.3fg  Z: %+.3fg  |a|: %.3fg",
+                            accelX, accelY, accelZ, mag);
         }
-        lastPublishTime = currentTime;
     }
 
-    delay(100); // 10Hz update rate
-}
+    // --- Slow path: publish to Particle cloud every 2000ms ---
+    if (now - lastPublish >= PUBLISH_INTERVAL) {
+        lastPublish = now;
 
-void displayValue(float value) {
-    // Display G-force value (e.g., 1.23 shows as "1.23")
-    int displayValue = (int)(value * 100); // Convert to integer (123 for 1.23g)
+        char payload[64];
+        snprintf(payload, sizeof(payload), "%.3f", mag);
 
-    int digit1 = (displayValue / 1000) % 10;
-    int digit2 = (displayValue / 100) % 10;
-    int digit3 = (displayValue / 10) % 10;
-    int digit4 = displayValue % 10;
+        bool published = Particle.publish("accel_magnitude", payload,
+                                          60, PRIVATE);
+        if (published) {
+            Serial.printlnf("Published magnitude: %sg", payload);
+        } else {
+            Serial.println("Publish failed (cloud not connected?)");
+        }
+    }
 
-    display.display(0, digit1);
-    display.display(1, digit2);
-    display.display(2, digit3);
-    display.display(3, digit4);
-    display.point(POINT_ON); // Show decimal point between digits 1 and 2
+    Particle.process();
 }
