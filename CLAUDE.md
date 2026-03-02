@@ -97,23 +97,67 @@ gee-force/
 3. **G-Force Calculation**:
    - Computes total magnitude: sqrt(ax² + ay² + az²)
    - Tracks maximum g-force throughout session
-   - Updates display at 10Hz
+   - Updates display at 20Hz
 
-4. **Cloud Publishing**:
-   - Publishes g-force readings to Particle Cloud
-   - Event name: "gforce"
-   - Can be used for data logging and analysis
+4. **Sample Buffer**:
+   - Circular buffer storing 20 samples (1 second of data)
+   - Each sample: timestamp, x, y, z, magnitude
+   - Static allocation to avoid heap fragmentation
+   - Automatically wraps at buffer end
+
+5. **New Relic Client** (`lib/NewRelicClient`):
+   - Lightweight HTTP client for Event API
+   - Batches samples into JSON payload
+   - Handles connection lifecycle
+   - Error recovery and retry logic
+   - Non-blocking transmission where possible
 
 ### Data Flow
 
-1. Loop runs at 10Hz (100ms delay)
+Current implementation:
+1. Loop runs at 20Hz (50ms sample interval)
 2. Read accelerometer x, y, z values via I2C
 3. Convert raw values to g-force units
 4. Calculate total g-force magnitude
-5. Update maximum g-force if exceeded
-6. Display current value on 4-digit display
-7. Publish to Particle Cloud for logging
+5. Update 4-digit display with current magnitude
+6. Buffer samples in memory (20 samples per second)
+7. Every 1 second, batch and send buffered samples to New Relic
 8. Repeat
+
+### New Relic Integration
+
+**Event API Details**:
+- **Endpoint**: `https://insights-collector.newrelic.com/v1/accounts/{accountId}/events`
+- **Authentication**: Insert API Key (X-Insert-Key header)
+- **Event Type**: `AccelSample`
+- **Data Format**: JSON array of events (batched)
+
+**Batching Strategy**:
+- Samples collected at 20Hz (50ms intervals)
+- 20 samples buffered per second
+- Transmitted as batch every 1 second to minimize HTTP overhead
+- Static circular buffer to avoid heap fragmentation
+- Memory-efficient: ~80 bytes per sample × 20 samples = 1.6KB buffer
+
+**Event Schema**:
+```json
+{
+  "eventType": "AccelSample",
+  "timestamp": 1234567890123,
+  "accelX": 0.123,
+  "accelY": 0.456,
+  "accelZ": 0.789,
+  "magnitude": 0.935,
+  "deviceId": "photon_12345"
+}
+```
+
+**HTTP Client**:
+- Custom lightweight HTTP client library (lib/NewRelicClient)
+- Minimizes 3rd party dependencies
+- Uses Particle TCPClient for HTTP POST
+- Handles connection management and error recovery
+- Non-blocking where possible to maintain sampling rate
 
 ### Important Patterns
 
