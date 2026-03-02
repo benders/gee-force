@@ -58,6 +58,19 @@ void loop() {
         maxGForce = currentGForce;
     }
 
+    // Serial output for debugging
+    Serial.print("Raw: x=");
+    Serial.print(x);
+    Serial.print(" y=");
+    Serial.print(y);
+    Serial.print(" z=");
+    Serial.print(z);
+    Serial.print(" | G-force: ");
+    Serial.print(currentGForce, 2);
+    Serial.print("g | Max: ");
+    Serial.print(maxGForce, 2);
+    Serial.println("g");
+
     // Display current G-force
     displayValue(currentGForce);
 
