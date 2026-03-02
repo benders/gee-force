@@ -25,6 +25,10 @@ MMA7660 accelerometer;
 float maxGForce = 0.0;
 float currentGForce = 0.0;
 
+// Timing for cloud publishing (rate limit: 1 per second)
+unsigned long lastPublishTime = 0;
+const unsigned long PUBLISH_INTERVAL = 1000; // milliseconds
+
 void setup() {
     Serial.begin(9600);
 
@@ -58,24 +62,30 @@ void loop() {
         maxGForce = currentGForce;
     }
 
-    // Serial output for debugging
-    Serial.print("Raw: x=");
-    Serial.print(x);
-    Serial.print(" y=");
-    Serial.print(y);
-    Serial.print(" z=");
-    Serial.print(z);
-    Serial.print(" | G-force: ");
-    Serial.print(currentGForce, 2);
-    Serial.print("g | Max: ");
-    Serial.print(maxGForce, 2);
-    Serial.println("g");
+    // Serial output for debugging (only if serial is connected)
+    if (Serial) {
+        Serial.print("Raw: x=");
+        Serial.print(x);
+        Serial.print(" y=");
+        Serial.print(y);
+        Serial.print(" z=");
+        Serial.print(z);
+        Serial.print(" | G-force: ");
+        Serial.print(currentGForce, 2);
+        Serial.print("g | Max: ");
+        Serial.print(maxGForce, 2);
+        Serial.println("g");
+    }
 
     // Display current G-force
     displayValue(currentGForce);
 
-    // Publish to Particle Cloud (optional, for data logging)
-    Particle.publish("gforce", String::format("%.2f", currentGForce), PRIVATE);
+    // Publish to Particle Cloud (rate limited to 1 per second)
+    unsigned long currentTime = millis();
+    if (currentTime - lastPublishTime >= PUBLISH_INTERVAL) {
+        Particle.publish("gforce", String::format("%.2f", currentGForce), PRIVATE);
+        lastPublishTime = currentTime;
+    }
 
     delay(100); // 10Hz update rate
 }
