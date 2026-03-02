@@ -16,6 +16,9 @@
 // Enable system thread so user code runs independently of cloud
 SYSTEM_THREAD(ENABLED);
 
+// Enable application watchdog (60 second timeout)
+ApplicationWatchdog wd(60000, System.reset);
+
 // Pin definitions
 #define CLK D2
 #define DIO D3
@@ -51,6 +54,9 @@ void setup() {
 }
 
 void loop() {
+    // Pet the watchdog to prevent reset
+    ApplicationWatchdog::checkin();
+
     // Read accelerometer data using library's built-in conversion
     float ax, ay, az;
     accelerometer.getAcceleration(&ax, &ay, &az);
