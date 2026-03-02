@@ -1,0 +1,21 @@
+# Particle build files
+target/
+*.bin
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.tmp
+
+# Local environment
+.env
