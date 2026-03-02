@@ -28,12 +28,8 @@ unsigned long lastSample  = 0;
 unsigned long lastTransmit = 0; // New Relic batch transmission timer
 
 #define SAMPLE_INTERVAL   50    // accelerometer sampling (ms) - 20Hz
-#define TRANSMIT_INTERVAL 1000  // New Relic batch transmission (ms) - 1Hz
-
-// New Relic Configuration
-// TODO: Replace these with your New Relic account ID and Insert API key
-#define NR_ACCOUNT_ID "YOUR_ACCOUNT_ID"
-#define NR_INSERT_KEY "YOUR_INSERT_API_KEY"
+#define TRANSMIT_INTERVAL 250   // New Relic batch transmission (ms) - 4Hz
+                                // (5 samples per batch at 20Hz = 250ms)
 
 // Device ID (use Particle device ID)
 String deviceIdStr;
@@ -85,12 +81,13 @@ void setup() {
     tm1637.set(BRIGHT_TYPICAL); //BRIGHT_TYPICAL = 2,BRIGHT_DARKEST = 0,BRIGHTEST = 7;
     tm1637.point(POINT_OFF);
 
-    // Initialize New Relic client
+    // Initialize New Relic client (uses Particle webhooks)
     deviceIdStr = System.deviceID();
-    nrClient = new NewRelicClient(NR_ACCOUNT_ID, NR_INSERT_KEY, deviceIdStr.c_str());
+    nrClient = new NewRelicClient(deviceIdStr.c_str());
 
     Serial.printlnf("Device ID: %s", deviceIdStr.c_str());
-    Serial.println("New Relic client initialized");
+    Serial.println("New Relic client initialized (webhook mode)");
+    Serial.println("Remember to configure the 'nr_accel' webhook in Particle Console");
     Log.info("Setup has finished!");
 }
 
@@ -133,7 +130,7 @@ void loop() {
         }
     }
 
-    // --- Slow path: transmit batched samples to New Relic every 1000ms ---
+    // --- Slow path: transmit batched samples to New Relic every 250ms ---
     if (now - lastTransmit >= TRANSMIT_INTERVAL) {
         lastTransmit = now;
 
@@ -143,8 +140,8 @@ void loop() {
             bool success = nrClient->sendBatch();
 
             if (success) {
-                Serial.printlnf("NR Stats - Success: %lu, Failed: %lu, Dropped: %lu",
-                    nrClient->getSuccessCount(),
+                Serial.printlnf("NR Stats - Published: %lu, Failed: %lu, Dropped: %lu",
+                    nrClient->getPublishCount(),
                     nrClient->getFailureCount(),
                     nrClient->getSamplesDropped());
             }

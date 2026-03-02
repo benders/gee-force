@@ -113,7 +113,9 @@ SINCE 10 minutes ago
 
 ## Configuration
 
-Before deploying the code, you need to configure your New Relic credentials:
+The device uses **Particle Webhooks** to send data to New Relic. This keeps credentials secure (off the device and out of source code) and enables HTTPS communication.
+
+### Step 1: Get New Relic Credentials
 
 1. **Get your New Relic Insert API Key**:
    - Log in to your New Relic account
@@ -124,15 +126,48 @@ Before deploying the code, you need to configure your New Relic credentials:
    - In New Relic, your account ID is visible in the URL: `https://one.newrelic.com/accounts/{ACCOUNT_ID}/...`
    - Or find it in Account Settings
 
-3. **Update the code**:
-   - Open `src/gee-force.ino`
-   - Replace `YOUR_ACCOUNT_ID` with your account ID
-   - Replace `YOUR_INSERT_API_KEY` with your Insert API key
+### Step 2: Configure Particle Webhook
 
-```cpp
-#define NR_ACCOUNT_ID "YOUR_ACCOUNT_ID"
-#define NR_INSERT_KEY "YOUR_INSERT_API_KEY"
-```
+Configure a webhook in the Particle Console to forward events to New Relic:
+
+1. **Log in to Particle Console**:
+   - Go to [console.particle.io](https://console.particle.io)
+   - Navigate to **Integrations**
+
+2. **Create New Webhook**:
+   - Click **New Integration** → **Webhook**
+
+3. **Configure the Webhook**:
+   ```
+   Event Name: nr_accel
+   URL: https://insights-collector.newrelic.com/v1/accounts/YOUR_ACCOUNT_ID/events
+   Request Type: POST
+   Request Format: JSON
+   Device: (Select your device, or leave as "Any" for all devices)
+   ```
+
+4. **Add HTTP Headers**:
+   - Click **Advanced Settings** → **HTTP Headers**
+   - Add header:
+     ```
+     X-Insert-Key: YOUR_INSERT_API_KEY
+     Content-Type: application/json
+     ```
+
+5. **Configure Request Template** (Optional):
+   - Leave as **Default** to pass through the JSON payload as-is
+   - The device sends data in the correct format for New Relic
+
+6. **Save the Webhook**
+
+### Step 3: Verify Webhook Configuration
+
+After saving, you should see the webhook listed in your integrations. You can test it by:
+
+1. Deploying the code to your device
+2. Watching the serial output for publish confirmations
+3. Checking the webhook logs in Particle Console
+4. Querying New Relic for data (see NRQL queries below)
 
 ## Getting Started
 

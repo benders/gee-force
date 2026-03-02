@@ -1,14 +1,15 @@
 /**
- * NewRelicClient - Lightweight HTTP client for New Relic Event API
+ * NewRelicClient - Batches accelerometer samples for New Relic via Particle Webhooks
  *
- * Sends batched accelerometer samples to New Relic for analysis and visualization.
- * Designed for memory-constrained microcontrollers with minimal dependencies.
+ * Sends batched accelerometer samples to New Relic using Particle.publish() and webhooks.
+ * Credentials are stored securely in the webhook configuration, not on the device.
  *
  * Features:
  * - Static memory allocation (no heap fragmentation)
- * - Batched transmission (reduces HTTP overhead)
+ * - Batched transmission (reduces publish overhead and rate limits)
  * - Simple JSON serialization (no external library needed)
- * - Error handling and connection management
+ * - Secure: No credentials on device or in code
+ * - Automatic HTTPS via Particle Cloud
  */
 
 #ifndef NEW_RELIC_CLIENT_H
@@ -17,10 +18,11 @@
 #include "Particle.h"
 
 // Configuration
-#define NR_MAX_SAMPLES 20              // Max samples per batch (1 second at 20Hz)
-#define NR_HOSTNAME "insights-collector.newrelic.com"
-#define NR_PORT 443                    // HTTPS port
-#define NR_TIMEOUT 5000                // HTTP timeout in milliseconds
+// Note: Particle.publish() has a 622 byte data limit
+// Each sample is ~120 bytes in JSON format
+// 5 samples = ~600 bytes (safe margin)
+#define NR_MAX_SAMPLES 5               // Max samples per batch (limited by Particle.publish)
+#define NR_EVENT_NAME "nr_accel"       // Particle event name for webhook
 
 // Sample data structure
 struct AccelSample {
@@ -35,11 +37,9 @@ class NewRelicClient {
 public:
     /**
      * Constructor
-     * @param accountId New Relic account ID
-     * @param insertKey New Relic Insert API key
      * @param deviceId Unique device identifier
      */
-    NewRelicClient(const char* accountId, const char* insertKey, const char* deviceId);
+    NewRelicClient(const char* deviceId);
 
     /**
      * Add a sample to the buffer
@@ -49,8 +49,8 @@ public:
     bool addSample(const AccelSample& sample);
 
     /**
-     * Send buffered samples to New Relic
-     * @return true if transmission succeeded, false on error
+     * Send buffered samples to New Relic via Particle webhook
+     * @return true if publish succeeded, false on error
      */
     bool sendBatch();
 
@@ -72,14 +72,12 @@ public:
     /**
      * Get statistics
      */
-    unsigned long getSuccessCount() const { return successCount; }
+    unsigned long getPublishCount() const { return publishCount; }
     unsigned long getFailureCount() const { return failureCount; }
     unsigned long getSamplesDropped() const { return samplesDropped; }
 
 private:
     // Configuration
-    char accountId[16];
-    char insertKey[48];
     char deviceId[32];
 
     // Sample buffer (static allocation)
@@ -87,17 +85,13 @@ private:
     int sampleCount;
 
     // Statistics
-    unsigned long successCount;
+    unsigned long publishCount;
     unsigned long failureCount;
     unsigned long samplesDropped;
-
-    // HTTP client
-    TCPClient client;
 
     // Helper methods
     bool buildJsonPayload(char* buffer, int bufferSize);
     int appendSampleJson(char* buffer, int offset, int maxSize, const AccelSample& sample, bool isLast);
-    bool sendHttpPost(const char* payload, int payloadLength);
 };
 
 #endif // NEW_RELIC_CLIENT_H

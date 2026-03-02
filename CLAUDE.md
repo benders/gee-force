@@ -45,9 +45,26 @@ particle serial monitor
 # Monitor device logs
 particle monitor <device_name>
 
-# Subscribe to published events
-particle subscribe gforce
+# Subscribe to published events (New Relic data)
+particle subscribe nr_accel
+
+# Monitor webhook execution
+# View in Particle Console: Integrations → nr_accel → View Logs
 ```
+
+### Webhook Setup
+```bash
+# Create webhook from JSON file
+particle webhook create nr-webhook.json
+
+# List webhooks
+particle webhook list
+
+# Delete webhook
+particle webhook delete nr_accel
+```
+
+See [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) for detailed webhook configuration instructions.
 
 ### Library Management
 ```bash
@@ -120,50 +137,79 @@ Current implementation:
 3. Convert raw values to g-force units
 4. Calculate total g-force magnitude
 5. Update 4-digit display with current magnitude
-6. Buffer samples in memory (20 samples per second)
-7. Every 1 second, batch and send buffered samples to New Relic
-8. Repeat
+6. Buffer samples in memory (5 samples per batch)
+7. Every 250ms, batch and publish to Particle Cloud
+8. Particle webhook forwards to New Relic Event API
+9. Repeat
+
+Full path: Accelerometer → Device → Particle Cloud → Webhook → New Relic → NRQL Queries → Dashboards
 
 ### New Relic Integration
 
-**Event API Details**:
+**Architecture: Webhook-Based (Secure)**:
+- Device publishes events to Particle Cloud using `Particle.publish()`
+- Particle webhook forwards to New Relic Event API with credentials injected
+- Credentials never stored on device or in source code
+- HTTPS handled by Particle Cloud (Photon has limited TLS support)
+
+**Event Flow**:
+```
+Device → Particle.publish() → Particle Cloud → Webhook → New Relic Event API
+```
+
+**Webhook Configuration**:
+- **Event Name**: `nr_accel`
 - **Endpoint**: `https://insights-collector.newrelic.com/v1/accounts/{accountId}/events`
-- **Authentication**: Insert API Key (X-Insert-Key header)
-- **Event Type**: `AccelSample`
-- **Data Format**: JSON array of events (batched)
+- **Authentication**: X-Insert-Key header (configured in webhook)
+- **Method**: POST with JSON payload
 
 **Batching Strategy**:
 - Samples collected at 20Hz (50ms intervals)
-- 20 samples buffered per second
-- Transmitted as batch every 1 second to minimize HTTP overhead
+- 5 samples buffered per batch
+- Transmitted every 250ms (4 batches/second)
+- Limited by Particle.publish() constraints:
+  - Max payload: 622 bytes
+  - Max rate: 4 events/second sustained
 - Static circular buffer to avoid heap fragmentation
-- Memory-efficient: ~80 bytes per sample × 20 samples = 1.6KB buffer
+- Memory-efficient: ~120 bytes per sample × 5 samples = 600 bytes
 
 **Event Schema**:
 ```json
-{
-  "eventType": "AccelSample",
-  "timestamp": 1234567890123,
-  "accelX": 0.123,
-  "accelY": 0.456,
-  "accelZ": 0.789,
-  "magnitude": 0.935,
-  "deviceId": "photon_12345"
-}
+[
+  {
+    "eventType": "AccelSample",
+    "timestamp": 1234567890123,
+    "accelX": 0.123,
+    "accelY": 0.456,
+    "accelZ": 0.789,
+    "magnitude": 0.935,
+    "deviceId": "photon_12345"
+  },
+  ...
+]
 ```
 
-**HTTP Client**:
-- Custom lightweight HTTP client library (lib/NewRelicClient)
+**NewRelicClient Library** (`lib/NewRelicClient`):
+- Lightweight batching and JSON serialization
 - Minimizes 3rd party dependencies
-- Uses Particle TCPClient for HTTP POST
-- Handles connection management and error recovery
-- Non-blocking where possible to maintain sampling rate
+- Uses Particle.publish() for transmission
+- Handles buffer management and statistics
+- No HTTP/TLS code on device (handled by webhook)
 
 ### Important Patterns
 
-- **SYSTEM_THREAD(ENABLED)**: CRITICAL for stability. Without this, Particle.publish() calls can block indefinitely if cloud connection is slow, freezing the entire device. With SYSTEM_THREAD enabled, user code runs independently of cloud connectivity.
+- **SYSTEM_MODE(AUTOMATIC)**: Lets Particle Device OS manage cloud connectivity automatically. The device will attempt to stay connected to the Particle Cloud for reliable webhook delivery.
 
-- **I2C Bus Management**: The Photon's I2C bus can become overloaded with excessive traffic. Display updates are limited to 1Hz (synchronized with cloud publishes) to prevent I2C bus lockup. Running display updates at 10Hz caused device hangs after 10-50 cycles.
+- **Particle Webhooks for Credentials**: CRITICAL security pattern. Never hardcode API keys or credentials in device firmware. Use webhooks to keep credentials in the cloud where they can be updated without reflashing devices.
+
+- **I2C Bus Management**: The Photon's I2C bus can become overloaded with excessive traffic. The current implementation samples at 20Hz which has been tested stable. If issues occur, reduce sampling rate.
+
+- **Particle.publish() Rate Limits**: Critical constraint for webhook-based telemetry:
+  - Burst limit: 1 event/second
+  - Sustained limit: 4 events/second (averaged over 1 minute)
+  - Payload limit: 622 bytes per event
+  - Current config: 4 batches/second at ~600 bytes each (at sustained limit)
+  - If rate limiting occurs, reduce TRANSMIT_INTERVAL or NR_MAX_SAMPLES
 
 - **Application Watchdog**: A 60-second watchdog timer with ApplicationWatchdog::checkin() calls prevents permanent hangs. Device will auto-reset if code freezes.
 

@@ -6,7 +6,8 @@
       "Bash(particle *)",
       "Skill(nr:access-source-datanerd-us-skill)",
       "Bash(gh api:*)",
-      "Bash(GH_HOST=source.datanerd.us gh api:*)"
+      "Bash(GH_HOST=source.datanerd.us gh api:*)",
+      "Bash(git push:*)"
     ]
   }
 }

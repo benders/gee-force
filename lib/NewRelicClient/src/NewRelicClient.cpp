@@ -1,19 +1,13 @@
 /**
- * NewRelicClient implementation
+ * NewRelicClient implementation - Webhook-based approach
  */
 
 #include "NewRelicClient.h"
 
-NewRelicClient::NewRelicClient(const char* accountId, const char* insertKey, const char* deviceId)
-    : sampleCount(0), successCount(0), failureCount(0), samplesDropped(0) {
+NewRelicClient::NewRelicClient(const char* deviceId)
+    : sampleCount(0), publishCount(0), failureCount(0), samplesDropped(0) {
 
-    // Copy configuration strings
-    strncpy(this->accountId, accountId, sizeof(this->accountId) - 1);
-    this->accountId[sizeof(this->accountId) - 1] = '\0';
-
-    strncpy(this->insertKey, insertKey, sizeof(this->insertKey) - 1);
-    this->insertKey[sizeof(this->insertKey) - 1] = '\0';
-
+    // Copy device ID
     strncpy(this->deviceId, deviceId, sizeof(this->deviceId) - 1);
     this->deviceId[sizeof(this->deviceId) - 1] = '\0';
 }
@@ -87,92 +81,50 @@ int NewRelicClient::appendSampleJson(char* buffer, int offset, int maxSize,
     return written;
 }
 
-bool NewRelicClient::sendHttpPost(const char* payload, int payloadLength) {
-    // Build URL path
-    char urlPath[128];
-    snprintf(urlPath, sizeof(urlPath), "/v1/accounts/%s/events", accountId);
-
-    // Connect to New Relic
-    if (!client.connect(NR_HOSTNAME, NR_PORT)) {
-        Serial.println("NR: Connection failed");
-        return false;
-    }
-
-    // Build and send HTTP request
-    // Note: Using HTTP for now. For production, consider using Particle webhooks for HTTPS
-    client.print("POST ");
-    client.print(urlPath);
-    client.println(" HTTP/1.1");
-
-    client.print("Host: ");
-    client.println(NR_HOSTNAME);
-
-    client.print("X-Insert-Key: ");
-    client.println(insertKey);
-
-    client.println("Content-Type: application/json");
-
-    client.print("Content-Length: ");
-    client.println(payloadLength);
-
-    client.println("Connection: close");
-    client.println();
-
-    // Send payload
-    client.print(payload);
-
-    // Read response
-    unsigned long startTime = millis();
-    bool success = false;
-
-    while (client.connected() && (millis() - startTime < NR_TIMEOUT)) {
-        if (client.available()) {
-            String line = client.readStringUntil('\n');
-
-            // Check for HTTP 200 OK response
-            if (line.indexOf("HTTP/1.1 200") >= 0 || line.indexOf("HTTP/1.1 201") >= 0) {
-                success = true;
-            }
-
-            // Debug: print first line of response
-            if (line.length() > 0) {
-                Serial.print("NR Response: ");
-                Serial.println(line);
-                break; // Only read first line for efficiency
-            }
-        }
-    }
-
-    client.stop();
-    return success;
-}
-
 bool NewRelicClient::sendBatch() {
     if (sampleCount == 0) {
         return true; // Nothing to send
     }
 
     // Allocate buffer for JSON payload
-    // Estimate: ~120 bytes per sample × 20 samples = 2400 bytes + overhead = 2500 bytes
-    static char payload[2600];
+    // Particle.publish() has a 622 byte limit for data
+    // With 20 samples at ~120 bytes each, we exceed this limit
+    // Solution: Split into multiple publishes if needed, or reduce sample count per batch
+
+    // For now, let's use a reasonable buffer and check payload size
+    static char payload[620]; // Leave 2 bytes for safety
 
     if (!buildJsonPayload(payload, sizeof(payload))) {
         Serial.println("NR: JSON build failed (buffer overflow)");
+        Serial.printlnf("NR: Try reducing NR_MAX_SAMPLES (currently %d)", sampleCount);
         failureCount++;
         clear();
         return false;
     }
 
     int payloadLength = strlen(payload);
-    Serial.printlnf("NR: Sending %d samples (%d bytes)", sampleCount, payloadLength);
 
-    bool success = sendHttpPost(payload, payloadLength);
+    // Check if payload fits in Particle.publish() limit (622 bytes)
+    if (payloadLength > 620) {
+        Serial.printlnf("NR: Payload too large (%d bytes, max 620)", payloadLength);
+        Serial.println("NR: Consider reducing NR_MAX_SAMPLES");
+        failureCount++;
+        clear();
+        return false;
+    }
+
+    Serial.printlnf("NR: Publishing %d samples (%d bytes)", sampleCount, payloadLength);
+
+    // Publish via Particle webhook
+    // Event name matches webhook configuration
+    // Data is JSON array of samples
+    bool success = Particle.publish(NR_EVENT_NAME, payload, PRIVATE);
 
     if (success) {
-        Serial.printlnf("NR: Batch sent successfully (%d samples)", sampleCount);
-        successCount++;
+        Serial.printlnf("NR: Published successfully (%d samples)", sampleCount);
+        publishCount++;
     } else {
-        Serial.println("NR: Batch send failed");
+        Serial.println("NR: Publish failed (cloud not connected or rate limited?)");
         failureCount++;
     }
 
