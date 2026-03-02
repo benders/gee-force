@@ -45,16 +45,11 @@ void setup() {
 }
 
 void loop() {
-    // Read accelerometer data
-    int8_t x, y, z;
-    accelerometer.getXYZ(&x, &y, &z);
+    // Read accelerometer data using library's built-in conversion
+    float ax, ay, az;
+    accelerometer.getAcceleration(&ax, &ay, &az);
 
     // Calculate total G-force magnitude
-    // MMA7660 returns values in units of 1/21.3 g per LSB
-    float ax = x / 21.3;
-    float ay = y / 21.3;
-    float az = z / 21.3;
-
     currentGForce = sqrt(ax*ax + ay*ay + az*az);
 
     // Track maximum G-force
@@ -64,13 +59,13 @@ void loop() {
 
     // Serial output for debugging (only if serial is connected)
     if (Serial) {
-        Serial.print("Raw: x=");
-        Serial.print(x);
-        Serial.print(" y=");
-        Serial.print(y);
-        Serial.print(" z=");
-        Serial.print(z);
-        Serial.print(" | G-force: ");
+        Serial.print("Accel: x=");
+        Serial.print(ax, 2);
+        Serial.print("g y=");
+        Serial.print(ay, 2);
+        Serial.print("g z=");
+        Serial.print(az, 2);
+        Serial.print("g | Magnitude: ");
         Serial.print(currentGForce, 2);
         Serial.print("g | Max: ");
         Serial.print(maxGForce, 2);
