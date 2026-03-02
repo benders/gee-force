@@ -117,6 +117,14 @@ gee-force/
 
 ### Important Patterns
 
+- **SYSTEM_THREAD(ENABLED)**: CRITICAL for stability. Without this, Particle.publish() calls can block indefinitely if cloud connection is slow, freezing the entire device. With SYSTEM_THREAD enabled, user code runs independently of cloud connectivity.
+
+- **I2C Bus Management**: The Photon's I2C bus can become overloaded with excessive traffic. Display updates are limited to 1Hz (synchronized with cloud publishes) to prevent I2C bus lockup. Running display updates at 10Hz caused device hangs after 10-50 cycles.
+
+- **Application Watchdog**: A 60-second watchdog timer with ApplicationWatchdog::checkin() calls prevents permanent hangs. Device will auto-reset if code freezes.
+
+- **Static Buffers**: Use snprintf() with static char arrays instead of String::format() to avoid heap fragmentation on resource-constrained devices.
+
 - **MMA7660 Limitations**: The current accelerometer has a limited range (~1.5g to 3g max depending on configuration). This is intentional for prototyping. When testing with actual rocket launches, replace with a high-g accelerometer (e.g., ADXL377 for ±200g).
 
 - **Display Format**: The 4-digit display shows values with 2 decimal places. Values above 9.99g will overflow the display but will still be tracked in memory and published to the cloud.
@@ -128,9 +136,9 @@ gee-force/
 - **Platform**: Particle Photon (ARM Cortex M3 microcontroller)
 - **Language**: C++ (Arduino-style framework)
 - **Build System**: Particle Cloud Compiler
-- **Libraries**:
-  - `Grove_4Digital_Display`: TM1637 display driver
-  - `MMA7660`: Accelerometer driver
+- **Libraries** (verified working with Device OS 3.3.1):
+  - `Grove_4Digit_Display` v1.0.2: TM1637 display driver
+  - `MMA7660-Accelerometer` v0.0.3: MMA7660 accelerometer driver
 
 ## Configuration
 
