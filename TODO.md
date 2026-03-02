@@ -5,19 +5,21 @@ Project task list for Gee-Force rocket g-force tracker.
 ## Prototyping Phase (Current)
 
 ### Hardware Setup
-- [ ] Wire Grove 4-digit display to Photon (D2=CLK, D3=DIO)
-- [ ] Wire Grove MMA7660 accelerometer to Photon (I2C)
-- [ ] Test display with simple patterns
-- [ ] Test accelerometer readings at rest (should read ~1g)
-- [ ] Verify I2C communication is stable
+- [x] Wire Grove 4-digit display to Photon (D2=CLK, D3=DIO)
+- [x] Wire Grove MMA7660 accelerometer to Photon (I2C)
+- [x] Test display with simple patterns
+- [x] Test accelerometer readings at rest (should read ~1g)
+- [x] Verify I2C communication is stable
 
 ### Software Development
-- [ ] Test basic accelerometer readings via serial monitor
-- [ ] Calibrate display to show g-force correctly
-- [ ] Test g-force calculation accuracy
+- [x] Test basic accelerometer readings via serial monitor
+- [x] Test Particle Cloud publishing
+- [x] Add free memory monitoring to track for leaks
+- [x] Fix device stability with SYSTEM_THREAD
+- [ ] **URGENT: Fix alternating readings (1.0g vs 3.1g) - sensor or I2C issue**
+- [ ] Test g-force calculation accuracy with known accelerations
 - [ ] Implement zero-point calibration (subtract gravity at rest)
 - [ ] Add button to reset max g-force reading
-- [ ] Test Particle Cloud publishing
 - [ ] Add error handling for sensor initialization failures
 
 ### Testing & Validation
