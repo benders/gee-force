@@ -57,6 +57,9 @@ void loop() {
         maxGForce = currentGForce;
     }
 
+    // Get free memory
+    uint32_t freeMemory = System.freeMemory();
+
     // Serial output for debugging (only if serial is connected)
     if (Serial) {
         Serial.print("Accel: x=");
@@ -69,7 +72,9 @@ void loop() {
         Serial.print(currentGForce, 2);
         Serial.print("g | Max: ");
         Serial.print(maxGForce, 2);
-        Serial.println("g");
+        Serial.print("g | Free RAM: ");
+        Serial.print(freeMemory);
+        Serial.println(" bytes");
     }
 
     // Display current G-force
@@ -78,7 +83,10 @@ void loop() {
     // Publish to Particle Cloud (rate limited to 1 per second)
     unsigned long currentTime = millis();
     if (currentTime - lastPublishTime >= PUBLISH_INTERVAL) {
-        Particle.publish("gforce", String::format("%.2f", currentGForce), PRIVATE);
+        // Send JSON with g-force, max, and free memory
+        String data = String::format("{\"g\":%.2f,\"max\":%.2f,\"mem\":%lu}",
+                                     currentGForce, maxGForce, freeMemory);
+        Particle.publish("gforce", data, PRIVATE);
         lastPublishTime = currentTime;
     }
 
