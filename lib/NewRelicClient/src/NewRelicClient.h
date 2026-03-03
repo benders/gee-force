@@ -19,18 +19,18 @@
 
 // Configuration
 // Note: Particle.publish() has a 622 byte data limit
-// Each sample is ~120 bytes in JSON format
-// 5 samples = ~600 bytes (safe margin)
-#define NR_MAX_SAMPLES 5               // Max samples per batch (limited by Particle.publish)
+// Each sample is ~164 bytes in JSON format (with 13-digit timestamp + long device IDs)
+// 3 samples = ~492 bytes + overhead = ~500 bytes (safe margin)
+#define NR_MAX_SAMPLES 3               // Max samples per batch (limited by Particle.publish)
 #define NR_EVENT_NAME "nr_accel"       // Particle event name for webhook
 
 // Sample data structure
 struct AccelSample {
-    unsigned long timestamp;  // Milliseconds since epoch
-    float accelX;            // X-axis acceleration (g)
-    float accelY;            // Y-axis acceleration (g)
-    float accelZ;            // Z-axis acceleration (g)
-    float magnitude;         // Combined magnitude (g)
+    unsigned long long timestamp;  // Milliseconds since epoch (64-bit to avoid overflow)
+    float accelX;                 // X-axis acceleration (g)
+    float accelY;                 // Y-axis acceleration (g)
+    float accelZ;                 // Z-axis acceleration (g)
+    float magnitude;              // Combined magnitude (g)
 };
 
 class NewRelicClient {

@@ -56,16 +56,22 @@ int NewRelicClient::appendSampleJson(char* buffer, int offset, int maxSize,
     // Build single event JSON
     // {"eventType":"AccelSample","timestamp":123,"accelX":0.1,"accelY":0.2,"accelZ":0.3,"magnitude":0.4,"deviceId":"xyz"}
 
+    // Format timestamp as string to avoid %llu printf issues on this platform
+    char timestampStr[32];
+    snprintf(timestampStr, sizeof(timestampStr), "%lu%03lu",
+             (unsigned long)(sample.timestamp / 1000),
+             (unsigned long)(sample.timestamp % 1000));
+
     int remaining = maxSize - offset;
     int written = snprintf(buffer + offset, remaining,
         "{\"eventType\":\"AccelSample\","
-        "\"timestamp\":%lu,"
+        "\"timestamp\":%s,"
         "\"accelX\":%.3f,"
         "\"accelY\":%.3f,"
         "\"accelZ\":%.3f,"
         "\"magnitude\":%.3f,"
         "\"deviceId\":\"%s\"}%s",
-        sample.timestamp,
+        timestampStr,
         sample.accelX,
         sample.accelY,
         sample.accelZ,
@@ -88,10 +94,8 @@ bool NewRelicClient::sendBatch() {
 
     // Allocate buffer for JSON payload
     // Particle.publish() has a 622 byte limit for data
-    // With 20 samples at ~120 bytes each, we exceed this limit
-    // Solution: Split into multiple publishes if needed, or reduce sample count per batch
+    // With 4 samples at ~150 bytes each, we stay under 620 bytes
 
-    // For now, let's use a reasonable buffer and check payload size
     static char payload[620]; // Leave 2 bytes for safety
 
     if (!buildJsonPayload(payload, sizeof(payload))) {

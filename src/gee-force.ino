@@ -27,13 +27,14 @@ float mag = 0.0f;               // promoted so both timers can access it
 unsigned long lastSample  = 0;
 unsigned long lastTransmit = 0; // New Relic batch transmission timer
 
-#define SAMPLE_INTERVAL   50    // accelerometer sampling (ms) - 20Hz
-#define TRANSMIT_INTERVAL 250   // New Relic batch transmission (ms) - 4Hz
-                                // (5 samples per batch at 20Hz = 250ms)
+#define SAMPLE_INTERVAL   333   // accelerometer sampling (ms) - ~3Hz
+#define TRANSMIT_INTERVAL 1000  // New Relic batch transmission (ms) - 1Hz
+                                // (3 samples per batch = 1000ms, stays within rate limits)
 
 // Device ID (use Particle device ID)
 String deviceIdStr;
 NewRelicClient* nrClient = nullptr;
+bool timeIsSynced = false;  // Flag to prevent sampling until time is synced
 
 void displayNum(TM1637 tm, float num, int decimal = 0, bool show_minus = true) {
     // Displays number with decimal places (no decimal point implementation)
@@ -88,6 +89,23 @@ void setup() {
     Serial.printlnf("Device ID: %s", deviceIdStr.c_str());
     Serial.println("New Relic client initialized (webhook mode)");
     Serial.println("Remember to configure the 'nr_accel' webhook in Particle Console");
+
+    // Wait for time synchronization
+    Serial.println("Waiting for time sync...");
+    Particle.syncTime();
+    waitFor(Particle.syncTimeDone, 30000);
+
+    if (Time.isValid()) {
+        Serial.printlnf("Time synced: %s", Time.format(Time.now(), TIME_FORMAT_ISO8601_FULL).c_str());
+        unsigned long now = Time.now();
+        Serial.printlnf("Unix timestamp: %lu seconds = %lu%03lu milliseconds",
+                        now, now, (unsigned long)((millis() % 1000)));
+        timeIsSynced = true;
+    } else {
+        Serial.println("WARNING: Time sync failed, timestamps may be incorrect");
+        Serial.println("Samples will NOT be sent to New Relic until time is synced");
+    }
+
     Log.info("Setup has finished!");
 }
 
@@ -110,10 +128,11 @@ void loop() {
             // Update the 4-digit display on every sample
             displayNum(tm1637, mag, 2);
 
-            // Buffer sample for New Relic
-            if (nrClient) {
+            // Buffer sample for New Relic (only if time is synced)
+            if (nrClient && timeIsSynced) {
                 AccelSample sample;
-                sample.timestamp = Time.now() * 1000UL + (millis() % 1000); // Unix timestamp in ms
+                // Use 64-bit arithmetic to avoid overflow: Unix timestamp in milliseconds
+                sample.timestamp = ((unsigned long long)Time.now()) * 1000ULL + (millis() % 1000);
                 sample.accelX = accelX;
                 sample.accelY = accelY;
                 sample.accelZ = accelZ;
@@ -130,12 +149,13 @@ void loop() {
         }
     }
 
-    // --- Slow path: transmit batched samples to New Relic every 250ms ---
+    // --- Slow path: transmit batched samples to New Relic every 1000ms ---
     if (now - lastTransmit >= TRANSMIT_INTERVAL) {
         lastTransmit = now;
 
         if (nrClient && nrClient->getSampleCount() > 0) {
             Serial.printlnf("NR: Transmitting batch of %d samples", nrClient->getSampleCount());
+            Serial.printlnf("NR: Current Time.now() = %lu seconds", Time.now());
 
             bool success = nrClient->sendBatch();
 
