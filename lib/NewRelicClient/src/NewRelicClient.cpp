@@ -122,7 +122,8 @@ bool NewRelicClient::sendBatch() {
     // Publish via Particle webhook
     // Event name matches webhook configuration
     // Data is JSON array of samples
-    bool success = Particle.publish(NR_EVENT_NAME, payload, PRIVATE);
+    // bool success = Particle.publish(NR_EVENT_NAME, payload, PRIVATE);
+    bool success = 0;
 
     if (success) {
         Serial.printlnf("NR: Published successfully (%d samples)", sampleCount);
