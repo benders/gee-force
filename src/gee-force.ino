@@ -28,7 +28,7 @@ float mag = 0.0f;
 unsigned long lastSample = 0;
 unsigned long lastStatus  = 0;
 
-#define SAMPLE_INTERVAL  333    // accelerometer sampling interval (ms) — ~3 Hz
+#define SAMPLE_INTERVAL  50     // accelerometer sampling interval (ms) — 20 Hz
 #define STATUS_INTERVAL  30000  // MQTT status heartbeat interval (ms) — 0.033 Hz
 
 // Global MQTT manager — stack-allocated, no heap allocation after setup.
