@@ -82,7 +82,7 @@ public:
         Log.info("DBG publish: ts_s=%lu ts_ms=%u", ts_s, ts_ms);
 
         int n = snprintf(buf, sizeof(buf),
-            "{\"ts\":%lu%03u,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,\"m\":%.3f,\"dev\":\"%s\"}",
+            "{\"eventType\":\"AccelSample\",\"timestamp\":%lu%03u,\"accelX\":%.3f,\"accelY\":%.3f,\"accelZ\":%.3f,\"magnitude\":%.3f,\"deviceId\":\"%s\"}",
             ts_s, ts_ms, x, y, z, magnitude, _clientId);
         Log.info("DBG publish: snprintf n=%d buf=%.80s", n, buf);
 
@@ -106,7 +106,7 @@ public:
         }
 
         static char buf[128];
-        snprintf(buf, sizeof(buf), "{\"uptime\":%lu,\"rssi\":%d}", uptime, rssi);
+        snprintf(buf, sizeof(buf), "{\"eventType\":\"DeviceStatus\",\"uptime\":%lu,\"rssi\":%d}", uptime, rssi);
 
         bool ok = _client->publish(_topicStatus, buf);
         if (!ok) {
