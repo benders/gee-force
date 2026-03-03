@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Particle Photon",
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/lib/**",
+                "/Users/nic/Particle/community/libraries/**"
+            ],
+            "defines": [
+                "SPARK=1",
+                "PLATFORM_ID=6"
+            ],
+            "cppStandard": "c++14",
+            "intelliSenseMode": "linux-gcc-arm",
+            "browse": {
+                "limitSymbolsToIncludedHeaders": false
+            }
+        }
+    ],
+    "version": 4
+}
