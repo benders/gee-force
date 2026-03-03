@@ -12,7 +12,6 @@
                 "PLATFORM_ID=6"
             ],
             "cppStandard": "c++14",
-            "intelliSenseMode": "linux-gcc-arm",
             "browse": {
                 "limitSymbolsToIncludedHeaders": false
             }
