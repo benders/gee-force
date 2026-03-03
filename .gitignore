@@ -19,3 +19,6 @@ Thumbs.db
 
 # Local environment
 .env
+
+# Credentials — never commit
+src/credentials.h
