@@ -64,7 +64,7 @@ public:
     // Publish a single accelerometer sample.
     // Returns true on success.
     bool publishSample(unsigned long long ts, float x, float y, float z, float magnitude) {
-        Log.info("DBG publish: enter freeMem=%lu connected=%d",
+        Log.trace("DBG publish: enter freeMem=%lu connected=%d",
                  (unsigned long)System.freeMemory(), (int)_client->isConnected());
 
         if (!_client->isConnected()) {
@@ -79,16 +79,16 @@ public:
         // two adjacent %lu fields so both parts fit in 32 bits.
         unsigned long ts_s  = (unsigned long)(ts / 1000ULL);
         unsigned int  ts_ms = (unsigned int)(ts % 1000ULL);
-        Log.info("DBG publish: ts_s=%lu ts_ms=%u", ts_s, ts_ms);
+        Log.trace("DBG publish: ts_s=%lu ts_ms=%u", ts_s, ts_ms);
 
         int n = snprintf(buf, sizeof(buf),
             "{\"eventType\":\"AccelSample\",\"timestamp\":%lu%03u,\"accelX\":%.3f,\"accelY\":%.3f,\"accelZ\":%.3f,\"magnitude\":%.3f,\"deviceId\":\"%s\"}",
             ts_s, ts_ms, x, y, z, magnitude, _clientId);
-        Log.info("DBG publish: snprintf n=%d buf=%.80s", n, buf);
+        Log.trace("DBG publish: snprintf n=%d buf=%.80s", n, buf);
 
-        Log.info("DBG publish: calling client.publish topic=%s", _topicSample);
+        Log.trace("DBG publish: calling client.publish topic=%s", _topicSample);
         bool ok = _client->publish(_topicSample, buf);
-        Log.info("DBG publish: publish returned %d", (int)ok);
+        Log.trace("DBG publish: publish returned %d", (int)ok);
 
         if (!ok) {
             Log.warn("MQTT: publishSample failed (total failures: %lu)", _publishFailures + 1);

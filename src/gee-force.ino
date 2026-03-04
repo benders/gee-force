@@ -8,9 +8,7 @@ TM1637 tm1637(CLK, DIO);
 #include "MQTTManager.h"
 
 // Let Device OS manage the connection to the Particle Cloud.
-// SYSTEM_THREAD(ENABLED) is intentionally omitted: the MQTT library uses
-// TCPClient directly; concurrent system-thread WiFi management causes hard
-// faults on the Photon.  AUTOMATIC mode without threading is stable.
+SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(AUTOMATIC);
 
 // Enable application watchdog (60 second timeout).
@@ -25,8 +23,8 @@ MMA7660 accel;
 float accelX, accelY, accelZ;
 float mag = 0.0f;
 
-unsigned long lastSample = 0;
-unsigned long lastStatus  = 0;
+static system_tick_t lastWake   = 0;
+unsigned long        lastStatus = 0;
 
 #define SAMPLE_INTERVAL  50     // accelerometer sampling interval (ms) — 20 Hz
 #define STATUS_INTERVAL  30000  // MQTT status heartbeat interval (ms) — 0.033 Hz
@@ -74,7 +72,7 @@ void setup() {
     waitFor(Serial.isConnected, 5000);
 
     if (!accel.begin()) {
-        Serial.println("ERROR: Could not initialise accelerometer. Halting.");
+        Log.error("Could not initialise accelerometer. Halting.");
         while (true) { Particle.process(); }
     }
 
@@ -86,19 +84,19 @@ void setup() {
     String idStr = System.deviceID();
     idStr.toCharArray(deviceId, sizeof(deviceId));
 
-    Serial.printlnf("Device ID: %s", deviceId);
+    Log.info("Device ID: %s", deviceId);
 
     // Wait for time synchronization before publishing timestamped samples.
-    Serial.println("Waiting for time sync...");
+    Log.info("Waiting for time sync...");
     Particle.syncTime();
     waitFor(Particle.syncTimeDone, 30000);
 
     if (Time.isValid()) {
         timeIsSynced = true;
-        Serial.printlnf("Time synced: %s",
+        Log.info("Time synced: %s",
             Time.format(Time.now(), TIME_FORMAT_ISO8601_FULL).c_str());
     } else {
-        Serial.println("WARNING: Time sync failed — samples will not be published until synced");
+        Log.warn("Time sync failed — samples will not be published until synced");
     }
 
     // Initialize MQTT manager (connects to broker).
@@ -114,34 +112,29 @@ void loop() {
     // Pet the watchdog to prevent reset.
     ApplicationWatchdog::checkin();
 
-    unsigned long now = millis();
-
     // Drive MQTT reconnect logic and keep-alive.
     mqttManager.loop();
 
-    // --- Sample accelerometer and publish every SAMPLE_INTERVAL ms ---
-    if (now - lastSample >= SAMPLE_INTERVAL) {
-        lastSample = now;
+    // --- Sample accelerometer and publish at SAMPLE_INTERVAL rate ---
+    if (accel.readAxes(accelX, accelY, accelZ)) {
+        mag = accel.magnitude(accelX, accelY, accelZ);
 
-        if (accel.readAxes(accelX, accelY, accelZ)) {
-            mag = accel.magnitude(accelX, accelY, accelZ);
+        displayNum(tm1637, mag, 2);
 
-            displayNum(tm1637, mag, 2);
+        Log.info("Accel  X: %+.3fg  Y: %+.3fg  Z: %+.3fg  |a|: %.3fg",
+                        accelX, accelY, accelZ, mag);
 
-            Serial.printlnf("Accel  X: %+.3fg  Y: %+.3fg  Z: %+.3fg  |a|: %.3fg",
-                            accelX, accelY, accelZ, mag);
+        if (timeIsSynced) {
+            // Build millisecond-precision timestamp using 64-bit arithmetic.
+            unsigned long long ts =
+                ((unsigned long long)Time.now()) * 1000ULL + (millis() % 1000);
 
-            if (timeIsSynced) {
-                // Build millisecond-precision timestamp using 64-bit arithmetic.
-                unsigned long long ts =
-                    ((unsigned long long)Time.now()) * 1000ULL + (millis() % 1000);
-
-                mqttManager.publishSample(ts, accelX, accelY, accelZ, mag);
-            }
+            mqttManager.publishSample(ts, accelX, accelY, accelZ, mag);
         }
     }
 
     // --- Publish status heartbeat every STATUS_INTERVAL ms ---
+    unsigned long now = millis();
     if (now - lastStatus >= STATUS_INTERVAL) {
         lastStatus = now;
 
@@ -155,5 +148,6 @@ void loop() {
                  mqttManager.isConnected() ? "yes" : "no");
     }
 
-    Particle.process();
+    // Yield to RTOS for the remainder of the sample window.
+    os_thread_delay_until(&lastWake, SAMPLE_INTERVAL);
 }
